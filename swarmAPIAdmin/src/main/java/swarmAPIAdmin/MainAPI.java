@@ -1,16 +1,19 @@
 package swarmAPIAdmin;
 
 import java.util.ArrayList;
-
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import jakarta.servlet.http.HttpSession;
 import requestBodies.ActionRequest;
@@ -20,63 +23,65 @@ import requestBodies.Robot;
 public class MainAPI {
 	private int x = 0;
 	public static HashMap<String, HttpSession> sessions = new HashMap<String, HttpSession>();
+	public static HashMap<String, String> ESPs = new HashMap<String, String>();
 	public static ArrayList<ActionRequest> actions = new ArrayList<ActionRequest>();
+	public static HashMap<String, Queue<ActionRequest>> actionQueue = new HashMap<String, Queue<ActionRequest>>();
 
-	//Registers computer to the API
-	@PostMapping("/register")
-	public ResponseEntity<String> setSessionValue(HttpSession session, @RequestBody Robot r) {
-		session.setAttribute("ID", r.getId());
-		session.setAttribute("Name", r.getName());
-		session.setAttribute("iat", System.currentTimeMillis());
-		sessions.put(session.getId(), session);
-		return ResponseEntity.ok("Session created");
-	}
-	//Test parameters, ignore for now
-	@PostMapping("/test")
-	public ResponseEntity<String> test(HttpSession session) {
-		session.setAttribute("ID", "test"+x++);
-		session.setAttribute("Name", "test"+x++);
-		session.setAttribute("iat", System.currentTimeMillis());
-		sessions.put(session.getId(), session);
+	@PostMapping("/esp")
+	public ResponseEntity<String> espRegister(@RequestParam String key, @RequestParam String name) {
+		ESPs.put(name, key);
+		actionQueue.put(key, new LinkedList<ActionRequest>());
 		return ResponseEntity.ok("Test session created");
 	}
 	//Send an action request to another robot (any message here can be read by the other robot)
-	@PostMapping("/send")
-	public ResponseEntity<String> getSessionValue(HttpSession session, @RequestBody ActionRequest action) {
+	@PostMapping("/queue")
+	public ResponseEntity<String> queueOrder(@RequestParam String senderKey, @RequestParam String receiverName,@RequestBody ActionRequest action) {
+
 		try {
-			String fromID = (String) session.getAttribute("ID");
-			action.setFromID(fromID); //TODO: Add user checks (check if other session exists)
-			actions.add(action);
+			action.setFromID(senderKey);
+			action.setToID(ESPs.get(receiverName));
+			actionQueue.get(ESPs.get(receiverName)).add(action);
 		}
 		catch(Exception e) {
 			ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("Action failed to send");
 		}
 		return ResponseEntity.ok("Action sent");
+
 	}
-	
-	//Get all messages intended for current user
-	@GetMapping("/receive")
-	public List<ActionRequest> retrieveActions(HttpSession session) {
-		String toID = (String) session.getAttribute("ID");
-		List<ActionRequest> actions = new ArrayList<ActionRequest>();
-		for(int i =0; i < MainAPI.actions.size(); i++) {
-			if(MainAPI.actions.get(i).getToID().equals(toID)) {
-				actions.add(MainAPI.actions.get(i));
-			}
-		}
-		return actions;
-	}
-	
-	//Lists all active sessions (could be useful for debugging and monitoring)
-	@GetMapping("/active-sessions")
-	public ArrayList<String> getActiveSessions() {
+
+	@GetMapping("/active-esp")
+	public ArrayList<String> getActiveESP() {
 		ArrayList<String> list = new ArrayList<String>();
-		for (Map.Entry<String, HttpSession> entry : sessions.entrySet()) {
+		for (Map.Entry<String, String> entry : ESPs.entrySet()) {
 			String key = entry.getKey();
-			HttpSession value = entry.getValue();
+			String value = entry.getValue();
 			list.add(key + ": " + value);
 		}
+
 		return list;
 	}
+
+	@GetMapping("/active-queues")
+	public ArrayList<String> getQueues() {
+		ArrayList<String> list = new ArrayList<String>();
+		for (Map.Entry<String, Queue<ActionRequest>> entry : actionQueue.entrySet()) {
+			String key = entry.getKey();
+			Queue<ActionRequest> value = entry.getValue();
+			list.add(key + ": " + value);
+		}
+
+		return list;
+	}
+
+	@PostMapping("/dequeue")
+	public String dequeue(@RequestParam String key) {
+		if(actionQueue.containsKey(key))
+			if(!actionQueue.get(key).isEmpty())
+				return actionQueue.get(key).remove().getPayload();
+
+		return "No actions queued";
+	}
+
+
 
 }

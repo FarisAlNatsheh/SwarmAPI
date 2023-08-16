@@ -9,7 +9,7 @@ import requestBodies.ActionRequest;
 public class ProcessActions {
 	@Scheduled(fixedDelayString = "#{${process-speed}}")
 	public void processOrder() {
-		ActionRequest request = MainAPI.actions.get(0);
+		//ActionRequest request = MainAPI.actions.get(0);
 		//Send request to other API then remove actions.
 		//We might use this class if we have multiple APIs
 	}
